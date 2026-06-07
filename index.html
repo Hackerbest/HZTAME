@@ -510,9 +510,8 @@
     const supabaseAnonKey = "sb_publishable_9P36uYMuY4sh6dzKrNw95A_9k94rxTf";
     const viewCounterId = "home";
     const viewStorageKey = "rapeephat-view-count";
-    const visitorStorageKey = "rapeephat-visitor-id";
-    const localCountedStorageKey = `rapeephat-counted-${viewCounterId}`;
     let hasCountedView = false;
+    let shouldSyncSupabaseViews = true;
 
     function hasSupabaseConfig() {
       return supabaseUrl.startsWith("https://") &&
@@ -547,29 +546,6 @@
       return `${Date.now().toString(36)}-${randomPart}`;
     }
 
-    function getVisitorId() {
-      try {
-        const savedVisitorId = localStorage.getItem(visitorStorageKey);
-        if (savedVisitorId) {
-          return savedVisitorId;
-        }
-
-        const visitorId = createVisitorId();
-        localStorage.setItem(visitorStorageKey, visitorId);
-        document.cookie = `rapeephat-visitor-id=${visitorId}; max-age=31536000; path=/; SameSite=Lax`;
-        return visitorId;
-      } catch {
-        const cookieMatch = document.cookie.match(/(?:^|; )rapeephat-visitor-id=([^;]+)/);
-        if (cookieMatch) {
-          return decodeURIComponent(cookieMatch[1]);
-        }
-
-        const visitorId = createVisitorId();
-        document.cookie = `rapeephat-visitor-id=${visitorId}; max-age=31536000; path=/; SameSite=Lax`;
-        return visitorId;
-      }
-    }
-
     function renderViewCounter(views) {
       viewCounter.textContent = `\u0e40\u0e02\u0e49\u0e32\u0e0a\u0e21 ${views.toLocaleString("th-TH")} \u0e04\u0e19`;
     }
@@ -602,7 +578,7 @@
         headers: getSupabaseHeaders(),
         body: JSON.stringify({
           counter_id: viewCounterId,
-          visitor_id: getVisitorId()
+          visitor_id: createVisitorId()
         }),
         cache: "no-store"
       });
@@ -614,37 +590,14 @@
       return Number(await response.json()) || 0;
     }
 
-    function hasLocalVisitorCounted() {
-      try {
-        return localStorage.getItem(localCountedStorageKey) === "1";
-      } catch {
-        return document.cookie.includes(`${localCountedStorageKey}=1`);
-      }
-    }
-
-    function markLocalVisitorCounted() {
-      try {
-        localStorage.setItem(localCountedStorageKey, "1");
-      } catch {
-      }
-
-      document.cookie = `${localCountedStorageKey}=1; max-age=31536000; path=/; SameSite=Lax`;
-    }
-
-    function recordLocalUniqueView() {
-      if (hasLocalVisitorCounted()) {
-        renderViewCounter(readLocalViews());
-        return;
-      }
-
+    function recordLocalView() {
       const views = readLocalViews() + 1;
       saveLocalViews(views);
-      markLocalVisitorCounted();
       renderViewCounter(views);
     }
 
     async function syncSupabaseViews() {
-      if (!hasSupabaseConfig()) {
+      if (!hasSupabaseConfig() || !shouldSyncSupabaseViews) {
         return;
       }
 
@@ -665,18 +618,17 @@
       renderViewCounter(readLocalViews());
 
       if (!hasSupabaseConfig()) {
-        recordLocalUniqueView();
+        recordLocalView();
         return;
       }
 
       try {
         const views = await registerSupabaseVisitor();
         saveLocalViews(views);
-        markLocalVisitorCounted();
         renderViewCounter(views);
       } catch {
-        recordLocalUniqueView();
-        syncSupabaseViews();
+        shouldSyncSupabaseViews = false;
+        recordLocalView();
       }
     }
 
