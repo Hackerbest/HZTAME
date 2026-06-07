@@ -554,6 +554,23 @@
       viewCounter.textContent = `\u0e40\u0e02\u0e49\u0e32\u0e0a\u0e21 ${views.toLocaleString("th-TH")} \u0e04\u0e19`;
     }
 
+    function toSafeViewCount(views) {
+      const parsedViews = Number(views);
+      if (!Number.isFinite(parsedViews) || parsedViews < 0) {
+        return 0;
+      }
+
+      return Math.floor(parsedViews);
+    }
+
+    function saveHighestViews(views) {
+      const currentViews = readLocalViews();
+      const highestViews = Math.max(currentViews, toSafeViewCount(views));
+      saveLocalViews(highestViews);
+      renderViewCounter(highestViews);
+      return highestViews;
+    }
+
     function getSupabaseHeaders() {
       return {
         "Content-Type": "application/json",
@@ -598,6 +615,7 @@
       const views = readLocalViews() + 1;
       saveLocalViews(views);
       renderViewCounter(views);
+      return views;
     }
 
     async function syncSupabaseViews() {
@@ -607,8 +625,7 @@
 
       try {
         const views = await fetchSupabaseViews();
-        saveLocalViews(views);
-        renderViewCounter(views);
+        saveHighestViews(views);
       } catch {
       }
     }
@@ -620,19 +637,17 @@
 
       hasCountedView = true;
       renderViewCounter(readLocalViews());
+      recordLocalView();
 
       if (!hasSupabaseConfig()) {
-        recordLocalView();
         return;
       }
 
       try {
         const views = await registerSupabaseVisitor();
-        saveLocalViews(views);
-        renderViewCounter(views);
+        saveHighestViews(views);
       } catch {
         shouldSyncSupabaseViews = false;
-        recordLocalView();
       }
     }
 
