@@ -375,12 +375,6 @@
       display: none;
     }
 
-    .volume {
-      width: min(100%, 210px);
-      margin: 14px auto 0;
-      accent-color: var(--text);
-    }
-
     @media (max-width: 520px) {
       .center {
         padding-inline: 0;
@@ -406,9 +400,6 @@
         text-align: center;
       }
 
-      .volume {
-        display: none;
-      }
     }
   </style>
 </head>
@@ -480,7 +471,6 @@
           </button>
         </div>
       </div>
-      <input class="volume" id="volumeControl" type="range" min="0" max="100" value="100" aria-label="volume" />
       <p class="status" id="musicStatus">คลิกเพื่อเข้าและเปิดเพลง</p>
       <audio id="audioPlayer" preload="auto"></audio>
     </section>
@@ -494,7 +484,6 @@
     const toggleButton = document.getElementById("toggleMusic");
     const stopButton = document.getElementById("stopMusic");
     const nextButton = document.getElementById("nextMusic");
-    const volumeControl = document.getElementById("volumeControl");
     const statusText = document.getElementById("musicStatus");
     const trackTitle = document.getElementById("trackTitle");
     const currentTimeText = document.getElementById("currentTime");
@@ -722,10 +711,6 @@
         syncSupabaseViews();
       }
     });
-    function getVolume() {
-      return Number(volumeControl.value) / 100;
-    }
-
     function formatTime(seconds) {
       const minutes = Math.floor(seconds / 60);
       const remainingSeconds = Math.floor(seconds % 60).toString().padStart(2, "0");
@@ -737,7 +722,7 @@
       const track = playlist[trackIndex];
       trackTitle.textContent = track.title;
       audioPlayer.src = track.src;
-      audioPlayer.volume = getVolume();
+      audioPlayer.volume = 1;
       audioPlayer.load();
       updateProgress();
       updateStatus();
@@ -818,10 +803,6 @@
     toggleButton.addEventListener("click", toggleMusic);
     stopButton.addEventListener("click", stopMusic);
     nextButton.addEventListener("click", nextMusic);
-    volumeControl.addEventListener("input", () => {
-      audioPlayer.volume = getVolume();
-    });
-
     enterScreen.addEventListener("click", () => {
       playMusic();
     });
