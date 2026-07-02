@@ -502,10 +502,10 @@
     const supabaseUrl = "https://yntgvzdfvtjfyszbfygr.supabase.co";
     const supabaseAnonKey = "sb_publishable_XyjAI0GPMBaTOHVXX5LR_Q_Smc1M3ma";
     const viewCounterId = "home";
-    const viewStorageKey = "rapeephat-view-count";
-    const visitorStorageKey = "rapeephat-visitor-id";
-    const localDeviceCountedStorageKey = "rapeephat-local-device-counted";
-    const supabaseVisitorRegisteredStorageKey = "rapeephat-supabase-visitor-registered";
+    const viewStorageScope = `${supabaseUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}-${viewCounterId}`.replace(/[^a-zA-Z0-9_-]/g, "-");
+    const viewStorageKey = `rapeephat-view-count-${viewStorageScope}`;
+    const visitorStorageKey = `rapeephat-visitor-id-${viewStorageScope}`;
+    const localDeviceCountedStorageKey = `rapeephat-local-device-counted-${viewStorageScope}`;
     let hasCountedView = false;
     let shouldSyncSupabaseViews = true;
 
@@ -582,14 +582,6 @@
       saveStoredValue(localDeviceCountedStorageKey, "1");
     }
 
-    function hasSupabaseVisitorRegistered() {
-      return readStoredValue(supabaseVisitorRegisteredStorageKey) === "1";
-    }
-
-    function markSupabaseVisitorRegistered() {
-      saveStoredValue(supabaseVisitorRegisteredStorageKey, "1");
-    }
-
     function renderViewCounter(views) {
       viewCounter.textContent = `\u0e40\u0e02\u0e49\u0e32\u0e0a\u0e21 ${views.toLocaleString("th-TH")} \u0e04\u0e19`;
     }
@@ -603,12 +595,11 @@
       return Math.floor(parsedViews);
     }
 
-    function saveHighestViews(views) {
-      const currentViews = readLocalViews();
-      const highestViews = Math.max(currentViews, toSafeViewCount(views));
-      saveLocalViews(highestViews);
-      renderViewCounter(highestViews);
-      return highestViews;
+    function saveSyncedViews(views) {
+      const syncedViews = toSafeViewCount(views);
+      saveLocalViews(syncedViews);
+      renderViewCounter(syncedViews);
+      return syncedViews;
     }
 
     function getSupabaseHeaders() {
@@ -665,7 +656,7 @@
 
       try {
         const views = await fetchSupabaseViews();
-        saveHighestViews(views);
+        saveSyncedViews(views);
       } catch {
       }
     }
@@ -679,26 +670,20 @@
       renderViewCounter(readLocalViews());
       const visitorId = getVisitorId();
 
+      if (hasSupabaseConfig()) {
+        try {
+          const views = await registerSupabaseVisitor(visitorId);
+          saveSyncedViews(views);
+        } catch {
+          shouldSyncSupabaseViews = false;
+        }
+
+        return;
+      }
+
       if (!hasLocalDeviceCounted()) {
         recordLocalView();
         markLocalDeviceCounted();
-      }
-
-      if (!hasSupabaseConfig()) {
-        return;
-      }
-
-      if (hasSupabaseVisitorRegistered()) {
-        syncSupabaseViews();
-        return;
-      }
-
-      try {
-        const views = await registerSupabaseVisitor(visitorId);
-        markSupabaseVisitorRegistered();
-        saveHighestViews(views);
-      } catch {
-        shouldSyncSupabaseViews = false;
       }
     }
 
