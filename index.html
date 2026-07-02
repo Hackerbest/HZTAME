@@ -514,6 +514,9 @@
     const supabaseAnonKey = "sb_publishable_9P36uYMuY4sh6dzKrNw95A_9k94rxTf";
     const viewCounterId = "home";
     const viewStorageKey = "rapeephat-view-count";
+    const visitorStorageKey = "rapeephat-visitor-id";
+    const localDeviceCountedStorageKey = "rapeephat-local-device-counted";
+    const supabaseVisitorRegisteredStorageKey = "rapeephat-supabase-visitor-registered";
     let hasCountedView = false;
     let shouldSyncSupabaseViews = true;
 
@@ -523,22 +526,43 @@
         !supabaseAnonKey.includes("YOUR_SUPABASE_ANON_KEY");
     }
 
-    function readLocalViews() {
+    function readCookie(name) {
+      const safeName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const cookieMatch = document.cookie.match(new RegExp(`(?:^|; )${safeName}=([^;]*)`));
+      return cookieMatch ? decodeURIComponent(cookieMatch[1]) : "";
+    }
+
+    function writeCookie(name, value) {
+      document.cookie = `${name}=${encodeURIComponent(value)}; max-age=31536000; path=/; SameSite=Lax`;
+    }
+
+    function readStoredValue(storageKey) {
       try {
-        return Number(localStorage.getItem(viewStorageKey) || "0") || 0;
+        const value = localStorage.getItem(storageKey);
+        if (value !== null && value !== "") {
+          return value;
+        }
       } catch {
-        const cookieMatch = document.cookie.match(/(?:^|; )rapeephat-view-count=(\d+)/);
-        return cookieMatch ? Number(cookieMatch[1]) : 0;
       }
+
+      return readCookie(storageKey);
+    }
+
+    function saveStoredValue(storageKey, value) {
+      try {
+        localStorage.setItem(storageKey, value);
+      } catch {
+      }
+
+      writeCookie(storageKey, value);
+    }
+
+    function readLocalViews() {
+      return Number(readStoredValue(viewStorageKey) || "0") || 0;
     }
 
     function saveLocalViews(views) {
-      try {
-        localStorage.setItem(viewStorageKey, String(views));
-      } catch {
-      }
-
-      document.cookie = `rapeephat-view-count=${views}; max-age=31536000; path=/; SameSite=Lax`;
+      saveStoredValue(viewStorageKey, String(views));
     }
 
     function createVisitorId() {
@@ -548,6 +572,33 @@
 
       const randomPart = Array.from(crypto.getRandomValues(new Uint32Array(4)), (value) => value.toString(36)).join("");
       return `${Date.now().toString(36)}-${randomPart}`;
+    }
+
+    function getVisitorId() {
+      let visitorId = readStoredValue(visitorStorageKey);
+
+      if (!visitorId) {
+        visitorId = createVisitorId();
+      }
+
+      saveStoredValue(visitorStorageKey, visitorId);
+      return visitorId;
+    }
+
+    function hasLocalDeviceCounted() {
+      return readStoredValue(localDeviceCountedStorageKey) === "1";
+    }
+
+    function markLocalDeviceCounted() {
+      saveStoredValue(localDeviceCountedStorageKey, "1");
+    }
+
+    function hasSupabaseVisitorRegistered() {
+      return readStoredValue(supabaseVisitorRegisteredStorageKey) === "1";
+    }
+
+    function markSupabaseVisitorRegistered() {
+      saveStoredValue(supabaseVisitorRegisteredStorageKey, "1");
     }
 
     function renderViewCounter(views) {
@@ -593,13 +644,13 @@
       return Number(rows[0]?.views) || 0;
     }
 
-    async function registerSupabaseVisitor() {
+    async function registerSupabaseVisitor(visitorId) {
       const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/register_page_visitor`, {
         method: "POST",
         headers: getSupabaseHeaders(),
         body: JSON.stringify({
           counter_id: viewCounterId,
-          visitor_id: createVisitorId()
+          visitor_id: visitorId
         }),
         cache: "no-store"
       });
@@ -637,14 +688,25 @@
 
       hasCountedView = true;
       renderViewCounter(readLocalViews());
-      recordLocalView();
+      const visitorId = getVisitorId();
+
+      if (!hasLocalDeviceCounted()) {
+        recordLocalView();
+        markLocalDeviceCounted();
+      }
 
       if (!hasSupabaseConfig()) {
         return;
       }
 
+      if (hasSupabaseVisitorRegistered()) {
+        syncSupabaseViews();
+        return;
+      }
+
       try {
-        const views = await registerSupabaseVisitor();
+        const views = await registerSupabaseVisitor(visitorId);
+        markSupabaseVisitorRegistered();
         saveHighestViews(views);
       } catch {
         shouldSyncSupabaseViews = false;
